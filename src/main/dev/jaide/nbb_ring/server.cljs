@@ -5,7 +5,7 @@
    [promesa.core :as p]
    ["http" :as http]))
 
-(defn- server-host
+(defn- parse-server-host
   [request]
   (let [headers (.-headers request)
         host (aget headers "host")
@@ -16,15 +16,15 @@
              nil
              (js/Number.parseInt port 10))}))
 
-(defn- request-protocol
+(defn- get-request-protocol
   [request]
   (if (some-> request (.-socket) (.-encrypted))
     "https"
     "http"))
 
-(defn- request-content-type
-  [headers]
-  (let [content-type (aget headers "content-type")
+(defn- parse-content-type
+  [request]
+  (let [content-type (.. request -headers -content-type)
         [type-str] (->> (s/split content-type #";")
                         (map s/trim))]
     {:type type-str
@@ -44,15 +44,31 @@
       (js/Object.fromEntries)
       (js->clj :keywordize-keys true)))
 
+(defn- get-content-length
+  [request]
+  (let [length (-> request
+                   (.-headers)
+                   (.-content-length)
+                   (js/Number.parseInt 10))]
+    (when (not (js/Number.isNaN length))
+      length)))
+
+(defn- get-request-method
+  [request]
+  (let [method (-> request (.-method))]
+    (if (s/blank? method)
+      :get
+      (-> method
+          (s/lower-case)
+          (keyword)))))
+
 (defn node-req->ring
   [request]
-  (let [headers (.-headers request)
-        controller (js/AbortController.)
-        protocol (request-protocol request)
-        host (server-host request)
+  (let [controller (js/AbortController.)
+        protocol (get-request-protocol request)
+        host (parse-server-host request)
         url (js/URL. (str protocol "://" (:full host) (.-url request)))
-        content-type (request-content-type headers)]
-    (js/console.log url)
+        content-type (parse-content-type request)]
     {:server-port        (get host :port)
      :server-name        (get host :hostname)
      :remote-addr        (.. request -socket (address) (-address)) ;; @TODO X-Forwarded-For headers
@@ -61,15 +77,11 @@
      :query-string       (.-search url)
      :query              (searchParams->clj (.-searchParams url))
      :scheme             (keyword protocol)
-     :request-method     (or  (-> request
-                                  (.-method)
-                                  (s/lower-case)
-                                  (keyword))
-                              :get)
+     :request-method     (get-request-method request)
      :protocol           (str (s/upper-case protocol) "/" (.-httpVersion request))
      :headers            (js->clj (.-headers request) :keywordize-keys true)
      :content-type       (get content-type :type)
-     :content-length     (aget headers "Content-Length")
+     :content-length     (get-content-length request)
      :character-encoding (get content-type :charset)
      :ssl-client-cert    {}
      :body               (.-body request)
