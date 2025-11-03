@@ -159,7 +159,7 @@
   (.end response (when (:body res)
                    (get res :body ""))))
 
-(defn request-listener
+(defn create-request-handler
   [ring-mw]
   (fn [node-req node-res]
     (if (= (.-url node-req) "/favicon.ico")
@@ -202,7 +202,7 @@
   []
   (p/let [mw-fn (p/-> default-mw
                       (echo-mw))]
-    (let [server (http/createServer (request-listener mw-fn))]
+    (let [server (http/createServer (create-request-handler mw-fn))]
       (.listen server 3030 "0.0.0.0" #(server-callback server))
       (doseq [signal ["SIGINT" "SIGTERM" "SIGQUIT"]]
         (js/process.on signal #(stop-server server))))))
