@@ -102,7 +102,75 @@ AbortController if the socket connection closes early.
 
 ### Responses
 
+The following fields in a res(ponse) hash-map will be applied to the
+node http.ServerResponse object:
+
+- status {number} - Numeric status such as 200, 404, 500, etc..., defaults to
+  200
+- headers {hash-map} - Mapping of header key-value pairs to send first. For
+  example: `{:Content-Type "application/json"}`
+- body {string} - Body data to send with the response after the headers. Does
+  not stringify or serialize data by default, requires middleware.
+
 ### Middleware
+
+This library should provide a few built-in middleware options to make some
+common operations simple and easy.
+
+```clojure
+(p/-> default-handler
+      (my-router)
+      (my-middleware)
+      (mw/json))
+```
+
+The middleware can be dropped into a composed middleware stack using the
+promesa/-> thread operator to support async request handling without any
+implementation complexity of endusers.
+
+The `mw/json` middleware receives the req first before the stack and the res at
+the end of the request cycle. This makes it trivial to support parsing JSON data
+from the post body before any other middleware receives the request, and
+serializing the body on response objects before sending to the browser after all
+other middleware.
+
+As an over-simplified example:
+
+```clojure
+(defn json
+  [next-mw]
+  (fn [req]
+     (let [req (if (:body req)
+                 (assoc req :body (js/JSON.parse (:body req)))
+                 req)
+           res (next-mw req)]
+       (if (:body res)
+         (assoc res :body (js/JSON.serialize (:body res)))
+         res))))
+```
+
+#### default-handler
+
+Middleware for returning a 404 by default for unhandled requests.
+
+#### url-encoded-form-data
+
+Middleware for parsing urlencoded form data. Commonly used for built-in browser
+form submission processing.
+
+#### json
+
+Middleware for parsing incoming JSON body data from POST, PUT, PATCH, or DELETE
+requests. Additionally handles serializing body data into a JSON string.
+
+#### logging
+
+Middleware for logging incoming request data and outgoing response metadata
+including the time between processing a request and the response.
+
+#### timeout
+
+Middleware for handling request timeouts.
 
 ### Environment Variables
 
@@ -176,3 +244,8 @@ routing implementation. This is consistent with Ring's Clojure implementation
 which can be used with libraries like Reitit or Compojure. That said, there is
 room for creating a routing library that provides a clojure friendly API around
 a trie based routing engine for better performance.
+
+### Web Sockets
+
+While worth exploring to see what it would take to support websocket
+connections, v1 should focus on the core middleware.
