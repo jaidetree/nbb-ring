@@ -207,7 +207,18 @@ var that can manually specify the max number of cores for fine tuning.
 
 ### Graceful Shutdown
 
+When interrupting or terminating the node server process it should gracefully
+shutdown all the subprocess servers and disconnect any connected sockets. This
+should prevent unexpected behavior like restarting the server and it throwing
+EADDRINUSE errors when no server is running.
+
 ### Headers and Timeouts
+
+By default requests should have a 30 second timeout plus the buffer window
+timeout before a socket is disconnected. The function for creating a http server
+should set the timeout properties using an option value, or an env var, or a
+default value if neither is present. This supports setting up multiple servers
+if desired.
 
 ## Ring Adapter
 
@@ -215,19 +226,118 @@ var that can manually specify the max number of cores for fine tuning.
 
 #### Request
 
+Request data should be transformed into a hash-map typically referred to as the
+`req`. To match with ring it should have the following properties.
+
+| name               | type            | Description                                                                                                                                                |
+| ------------------ | --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| server-port        | number          | Port the server is listening on                                                                                                                            |
+| server-name        | string          | The host name from the Host header of the incoming request                                                                                                 |
+| remote-addr        | string          | IP of the client making the request. Should use the x-forwarded-for address if proxied                                                                     |
+| uri                | string          | Location pathname of the request                                                                                                                           |
+| query-string       | string          | Raw query string included in the request url like `page=2`                                                                                                 |
+| scheme             | keyword         | Keyword of request protocol such as `:http` or `:https`                                                                                                    |
+| request-method     | keyword         | Lowercase request method such as `:get`, `:post`, `:put`, `:patch`, or `:delete`                                                                           |
+| protocol           | string          | Protocol + http version such as `HTTP/1.1`                                                                                                                 |
+| headers            | hash-map        | Hash-map of keyword header names to values such as `{:content-type "text/html"}`                                                                           |
+| content-type       | string          | Content-Type header, defaults to `nil`                                                                                                                     |
+| content-length     | number          | Content-Length header, defaults to `0`                                                                                                                     |
+| character-encoding | string          | Parsed from the charset of the `Content-Type` header                                                                                                       |
+| ssl-client-cert    | X509Certificate | Parsed from `https` client socket in `https` connections. Defaults to `nil`                                                                                |
+| body               | stream.Readable | Request body stream. It's wrapped around the original req but managed with an AbortController().signal for canceling requests when the socket disconnects. |
+
 #### Response
+
+Response data should be returned by ring middleware as a hash-map containing any
+of the following properties:
+
+| name    | type     | Default | Description                                                                                                                                       |
+| ------- | -------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| status  | number   | 200     | HTTP Status code to return                                                                                                                        |
+| headers | hash-map | {}      | HTTP Headers sent before the request body. Maps keys to header values like `{:Content-Type "text/html"}`                                          |
+| body    | any      | nil     | HTTP Response body to return. Strings are sent as-is but other middleware can be added to parse and stringify JSON data or support other formats. |
 
 ### Async Promise Handling
 
+While middleware looks synchronous, request handlers can return promises for
+async tasks. This should allow users to work with promesa which comes with
+node-babashka (nbb) out of the box. For example:
+
+```clojure
+(require '[promesa.core :as p])
+
+(defn my-async-mw
+  [next]
+  (fn [req]
+    (p/let [user (db/fetch-user)]
+      (next (assoc req :user user)))))
+```
+
+It is not recommended to layer on many async requests into the ring
+middleware. Doing so may result in very poor performance as the request will take
+the total time of every process in the middleware stack to resolve.
+
 ## Middleware
 
-### Caching
+### Query String Parsing
+
+Parses the incoming `(:query-string req)` into a cljs hash-map. Associates the
+`:query` hash-map onto the `req` for the next middleware to access as needed.
 
 ### JSON Parsing and Encoding
 
+Define a json middleware that parses incoming request body data into JSON then
+uses `js->clj` to convert to edn. It should only parse when content-type is set
+to `application/json`. At the end of the request chain it should also
+serialize body data if content-type of the response is `application/json`.
+
 ### Static File Serving
 
+Define static file middleware that appropriately loads the requested file, reads
+the contents, determines best fit mime-type, and sends the matching content-type
+header with the contents as the body.
+
+It should move on to the next middleware if the uri does not contain an
+extension.
+
+A 404 should be returned if the file does not exist. A 500 should be returned if
+there is an error reading the file.
+
+## REPL Driven Development
+
+### Evaluate Individual Middleware
+
+An optimal REPL experience is the ability to evaluate individual middleware
+definitions that would take effect for any incoming requests after eval. This
+makes it trivial to draft new middleware, change routes, and fix bugs without
+having to restart the server every time.
+
+The discovered approach so far is to have the ring middleware stack evaluated
+every request and instead of referencing functions directly like
+`(my-lib/my-mw)` reference the name indirectly like `(#'my-lib/my-mw)`. This
+enables evaluating a single middleware function and the changes are applied by
+the next incoming request. Otherwise devs would need to eval the updated
+middleware, eval the ring middleware stack, and restart the server.
+
+### List Servers
+
+Servers should be tracked in an atom so they can be referenced even if a server
+instance is not stored in a named symbol. This wil prevent servers from getting
+lost in the background when evaluating in a REPL.
+
+### Start, Stop, and Restart Servers
+
+Given the ability to list servers, there should be utility functions users can
+use in the REPL to start a stopped server, stop a started server, and restart a
+stopped or started server.
+
 ## Out-of-scope Features
+
+### Caching
+
+While typicially useful in a production server, there are too many ways to
+tackle caching and all of which come with a lot of trade offs. This is best left
+to separate middleware packages.
 
 ### Hiccup Templating
 

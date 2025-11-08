@@ -3,6 +3,7 @@
    [clojure.pprint :refer [pprint]]
    [clojure.string :as s]
    [promesa.core :as p]
+   [dev.jaide.nbb-ring.middleware :as mw]
    ["net" :as net]
    ["http" :as http]
    ["crypto" :as crypto]))
@@ -40,13 +41,6 @@
                 (if (s/blank? charset)
                   nil
                   charset))}))
-
-(defn- searchParams->clj
-  [searchParams]
-  (-> searchParams
-      (.entries)
-      (js/Object.fromEntries)
-      (js->clj :keywordize-keys true)))
 
 (defn- get-content-length
   [request]
@@ -101,16 +95,17 @@
         protocol (get-request-protocol request)
         host (parse-server-host request)
         url (js/URL. (str protocol "://" (:full host) (.-url request)))
-        content-type (parse-content-type request)]
+        content-type (parse-content-type request)
+        method (get-request-method request)]
     {:server-port        (get host :port)
      :server-name        (get host :hostname)
      :remote-addr        (get-client-address request)
      :uri                (.-url request)
      :url                (js/String url)
      :query-string       (.-search url)
-     :query              (searchParams->clj (.-searchParams url))
      :scheme             (keyword protocol)
-     :request-method     (get-request-method request)
+     :request-method     method
+     :method             method
      :protocol           (str (s/upper-case protocol) "/" (.-httpVersion request))
      :headers            (js->clj (.-headers request) :keywordize-keys true)
      :content-type       (get content-type :type)
@@ -165,7 +160,6 @@
     (if (= (.-url node-req) "/favicon.ico")
       (.end node-res "")
       (let [req (node-req->ring node-req)]
-        (pprint req)
         (p/catch
          (p/let [res (ring-mw req)]
            (send-node-response node-res res)
@@ -180,10 +174,11 @@
   (let [addr-obj (.address server)]
     (println (str "Server is listening on http://" (.-address addr-obj) ":" (.-port addr-obj)))))
 
-(defn echo-mw
-  []
-  (fn [_req]
+(defn hello-mw
+  [_next]
+  (fn [req]
     {:status 200
+     :req-id (:id req)
      :body (js/JSON.stringify (clj->js {:status :ok
                                         :message "Hello World"}))
      :headers {:Content-Type "application/json"}}))
@@ -201,7 +196,11 @@
 (defn -main
   []
   (p/let [mw-fn (p/-> default-mw
-                      (echo-mw))]
+                      (hello-mw)
+                      (mw/pprinter)
+                      (mw/query-parser)
+                      (mw/logger)
+                      (mw/identifier))]
     (let [server (http/createServer (create-request-handler mw-fn))]
       (.listen server 3030 "0.0.0.0" #(server-callback server))
       (doseq [signal ["SIGINT" "SIGTERM" "SIGQUIT"]]

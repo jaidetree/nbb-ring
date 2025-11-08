@@ -5,8 +5,8 @@
 That's a reasonable question tbh, ultimately it comes down to 2 ideas:
 
 1. I'm curious what a batteries included cljs web framework could look like.
-   - There's sitefox, but that's more of a thin wrapper around express and the
-     JS way of modeling this problemspace.
+   - There's sitefox, but that's more of a wrapper around express and the JS
+     way of modeling this problemspace.
    - I've really liked the ring middleware approach and the simplicity of taking
      request hash-map and returning a respone hash-map.
    - In modern JS we're seeing sort of a turn towards that with libraries like
