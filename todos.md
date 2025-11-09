@@ -62,8 +62,8 @@
 
 ## Testing
 
-- [ ] Conjure up a test-runner script
-- [ ] Look for previous projects with custom reporting
+- [x] Conjure up a test-runner script
+- [x] Look for previous projects with custom reporting
 
 ### Tests
 
@@ -83,8 +83,8 @@
 
 - [x] Basic Logging
   - [x] Colors
-  - [x] Disable colors via env var or when not a TTY
-- [ ] Print request details
-- [ ] Query string parsing
-- [ ] Identifier
+  - [ ] Disable colors via env var or when not a TTY
+- [x] Print request details
+- [x] Query string parsing
+- [x] Identifier
 - [ ] JSON Parsing & Serialization
