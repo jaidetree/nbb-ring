@@ -6,7 +6,8 @@
    [dev.jaide.nbb-ring.middleware :as mw]
    ["net" :as net]
    ["http" :as http]
-   ["crypto" :as crypto]))
+   ["crypto" :as crypto]
+   ["stream" :as stream]))
 
 (defn- parse-server-host
   [request]
@@ -83,6 +84,19 @@
           ip))
       socket-ip)))
 
+(defn- wrap-request-body
+  [request]
+  (let [body-stream (new (.-PassThrough stream))
+        abort-controller (new js/AbortController)]
+    (.addAbortSignal stream (.-signal abort-controller) body-stream)
+    (.pipe request body-stream)
+    (.on request
+         "close"
+         (fn []
+           (when-not (.-complete request)
+             (.abort abort-controller "connection closed"))))
+    body-stream))
+
 (defn node-req->ring
   "
   Transform node request into a ring-like request hash-map
@@ -112,7 +126,7 @@
      :content-length     (get-content-length request)
      :character-encoding (get content-type :charset)
      :ssl-client-cert    (get-client-cert request)
-     :body               (.-body request)
+     :body               (wrap-request-body request)
      :signal             (.-signal controller)}))
 
 (def ^:private default-method-statuses
@@ -155,19 +169,24 @@
                    (get res :body ""))))
 
 (defn create-request-handler
+  "
+  Creates a request handler compatible with node's http library and libraries like express.
+
+  Takes a function to return a composed middleware function
+  Returns a request handler function to transform request and response objects
+  and run it through ring-inspired middleware.
+  "
   [ring-mw]
   (fn [node-req node-res]
-    (if (= (.-url node-req) "/favicon.ico")
-      (.end node-res "")
-      (let [req (node-req->ring node-req)]
-        (p/catch
-         (p/let [res (ring-mw req)]
-           (send-node-response node-res res)
-           #_(.end node-res "Hello World"))
-         (fn [err]
-           (js/console.error err)
-           (set! (.-statusCode node-res) 500)
-           (.end node-res (js/String err))))))))
+    (let [req (node-req->ring node-req)]
+      (p/catch
+       (p/let [res (ring-mw req)]
+         (send-node-response node-res res)
+         #_(.end node-res "Hello World"))
+       (fn [err]
+         (js/console.error err)
+         (set! (.-statusCode node-res) 500)
+         (.end node-res (js/String err)))))))
 
 (defn server-callback
   [server]
@@ -175,13 +194,15 @@
     (println (str "Server is listening on http://" (.-address addr-obj) ":" (.-port addr-obj)))))
 
 (defn hello-mw
-  [_next]
+  [next]
   (fn [req]
-    {:status 200
-     :req-id (:id req)
-     :body (js/JSON.stringify (clj->js {:status :ok
-                                        :message "Hello World"}))
-     :headers {:Content-Type "application/json"}}))
+    (if (= (:uri req) "/")
+      {:status 200
+       :req-id (:id req)
+       :body (js/JSON.stringify (clj->js {:status :ok
+                                          :message "Hello World"}))
+       :headers {:Content-Type "application/json"}}
+      (next req))))
 
 (defn default-mw
   [_req]

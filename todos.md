@@ -13,7 +13,7 @@
   - [ ] Handle SIGINT events
 - [ ] Handle uncaught errors
 - [ ] Handle unhandled rejections
-- [ ] Wrap Body with abortcontroller controlled stream
+- [x] Wrap Body with abortcontroller controlled stream
 
 ### Server Options & Env Vars
 
@@ -46,7 +46,6 @@
 - [x] character-encoding
 - [x] ssl-client-cert
 - [x] body
-  - [ ] Wrap with abort signal
 - [ ] Catch handler
   - [ ] Format error messages nicely
 
@@ -64,7 +63,7 @@
 ## Testing
 
 - [ ] Conjure up a test-runner script
-- [ ] Look for previous custom reporting
+- [ ] Look for previous projects with custom reporting
 
 ### Tests
 
@@ -82,9 +81,9 @@
 
 ## Middleware
 
-- [ ] Basic Logging
-  - [ ] Colors
-  - [ ] Disable colors via env var or when not a TTY
+- [x] Basic Logging
+  - [x] Colors
+  - [x] Disable colors via env var or when not a TTY
 - [ ] Print request details
 - [ ] Query string parsing
 - [ ] Identifier
