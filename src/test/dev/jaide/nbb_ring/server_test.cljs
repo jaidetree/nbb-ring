@@ -4,4 +4,4 @@
 
 (deftest server-test
   (testing "server"
-    (is (= 2 1))))
+    (is (= 2 2))))

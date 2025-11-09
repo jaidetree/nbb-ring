@@ -1,6 +1,7 @@
-(ns dev.jaide.run-tests
+(ns dev.jaide.tests.run
   (:require
    [clojure.test :as t]
+   [dev.jaide.nbb-ring.colors :as c]
    [clojure.pprint :refer [pprint]]
    [dev.jaide.nbb-ring.server-test]))
 
@@ -42,7 +43,7 @@
   (inc-var-count! :fail)
   (append-error!
    (with-out-str
-     (println "\nFAILURE in" (t/testing-vars-str m))
+     (println (str "\n" (c/red "FAILURE") " in") (t/testing-vars-str m))
      (when (seq (:testing-contexts (t/get-current-env)))
        (println (t/testing-contexts-str)))
      (when-let [message (:message m)] (println message))
@@ -66,8 +67,8 @@
         total (+ pass fail error)
         not-pass (+ fail error)]
     (if (zero? not-pass)
-      (println (str " [passed " pass "/" total "]"))
-      (println (str " [failed " not-pass "/" total "]")))
+      (println (str " [" (c/green "passed " pass) "/" (c/green total) "]"))
+      (println (str " [" (c/red "failed " not-pass) "/" (c/red total) "]")))
     (doseq [error errors]
       (println error))))
 
